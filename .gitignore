@@ -1,0 +1,17 @@
+# 忽略本地音乐文件
+music/
+music/*
+!music/歌词/
+!music/封面/
+music/歌词/*
+!music/歌词/说明.txt
+music/封面/*
+!music/封面/说明.txt
+
+# 系统/编辑器文件
+.user.ini
+.DS_Store
+*.log
+Thumbs.db
+.idea/
+.vscode/
