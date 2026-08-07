@@ -153,40 +153,48 @@ function nameMatchesFile(string $name, string $base): bool
     return false;
 }
 
-// 查找某首歌对应的封面文件，返回【文件名】或 null
-function findCoverFile(string $base): ?string
+// 查找某首歌对应的封面文件，返回【文件名】或 null。
+// $candidates 可传入预扫描的封面文件列表，避免每首歌都重新扫描目录
+function findCoverFile(string $base, ?array $candidates = null): ?string
 {
     $dir = MUSIC_ROOT . '/' . COVER_DIR_NAME;
     if (!is_dir($dir)) return null;
-    $exts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'];
-    $dh = opendir($dir);
-    if ($dh === false) return null;
-    $matched = null;
-    while (($f = readdir($dh)) !== false) {
-        if ($f === '.' || $f === '..') continue;
-        $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
-        if (!in_array($ext, $exts)) continue;
-        if (nameMatchesFile($f, $base)) { $matched = $f; break; }
+    if ($candidates === null) {
+        $candidates = listFilesByExt($dir, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp']);
     }
-    closedir($dh);
-    return $matched;
+    foreach ($candidates as $f) {
+        if (nameMatchesFile($f, $base)) return $f;
+    }
+    return null;
 }
 
 // 查找某首歌对应的歌词文件，返回【文件名】或 null
-function findLyricFile(string $base): ?string
+function findLyricFile(string $base, ?array $candidates = null): ?string
 {
     $dir = MUSIC_ROOT . '/' . LYRIC_DIR_NAME;
     if (!is_dir($dir)) return null;
+    if ($candidates === null) {
+        $candidates = listFilesByExt($dir, ['lrc']);
+    }
+    foreach ($candidates as $f) {
+        if (nameMatchesFile($f, $base)) return $f;
+    }
+    return null;
+}
+
+// 列出目录内指定扩展名的文件（一次性扫描，供批量匹配复用）
+function listFilesByExt(string $dir, array $exts): array
+{
+    $out = [];
     $dh = opendir($dir);
-    if ($dh === false) return null;
-    $matched = null;
+    if ($dh === false) return $out;
     while (($f = readdir($dh)) !== false) {
         if ($f === '.' || $f === '..') continue;
-        if (strtolower(pathinfo($f, PATHINFO_EXTENSION)) !== 'lrc') continue;
-        if (nameMatchesFile($f, $base)) { $matched = $f; break; }
+        $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
+        if (in_array($ext, $exts)) $out[] = $f;
     }
     closedir($dh);
-    return $matched;
+    return $out;
 }
 
 // 极简解析 ID3v2 标题/歌手/专辑（mp3 嵌入信息），失败返回 null

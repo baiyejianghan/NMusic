@@ -6,7 +6,7 @@ $base = $_GET['file'] ?? '';
 if ($base === '' || !safeFileName($base)) {
     http_response_code(404);
     header('Content-Type: image/svg+xml');
-    echo '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#2a2a2e"/><text x="50%" y="50%" fill="#888" font-size="60" text-anchor="middle" dominant-baseline="central">♪</text></svg>';
+    echo '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#2a2a2e"/><g fill="none" stroke="#888" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" transform="translate(50,70) scale(8.3)"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></g></svg>';
     exit;
 }
 
@@ -14,7 +14,7 @@ $coverFile = findCoverFile($base);
 if ($coverFile === null) {
     http_response_code(404);
     header('Content-Type: image/svg+xml');
-    echo '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#2a2a2e"/><text x="50%" y="50%" fill="#888" font-size="60" text-anchor="middle" dominant-baseline="central">♪</text></svg>';
+    echo '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#2a2a2e"/><g fill="none" stroke="#888" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" transform="translate(50,70) scale(8.3)"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></g></svg>';
     exit;
 }
 

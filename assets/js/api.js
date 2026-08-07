@@ -63,3 +63,8 @@ const fmt = {
     return d.innerHTML;
   },
 };
+
+// ===== 图标 =====
+// 内联 SVG sprite（见 index.php），这里生成 <svg><use> 引用
+const ICON = (name, cls) =>
+  `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-${name}"/></svg>`;

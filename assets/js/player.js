@@ -16,6 +16,8 @@ class Player {
     this.onEnd = null;
     this.onMeta = null;     // 获取到时长回调 (song, duration)
     this.onLyrics = null;   // 歌词加载完成回调
+    this._preloadTimer = null;
+    this._preloading = null;
 
     this._bindEvents();
     this._loadPrefs();
@@ -69,6 +71,48 @@ class Player {
     this.audio.play().catch(() => {});
     this._loadLyrics(s.base);
     this.onChange && this.onChange(s, this.index);
+    this._schedulePreload();
+  }
+
+  // ---- 预加载下一首（填充浏览器缓存，切歌秒开）----
+  _nextIndex() {
+    if (!this.queue.length) return -1;
+    if (this.mode === 'shuffle') {
+      if (this.queue.length < 2) return this.index;
+      let i;
+      do { i = Math.floor(Math.random() * this.queue.length); } while (i === this.index);
+      return i;
+    }
+    if (this.mode === 'single') return this.index;
+    return (this.index + 1) % this.queue.length;
+  }
+
+  _schedulePreload() {
+    if (this._preloadTimer) { clearTimeout(this._preloadTimer); this._preloadTimer = null; }
+    // 播放 3 秒后再预加载，避免抢占当前歌曲带宽
+    this._preloadTimer = setTimeout(() => this._preloadNext(), 3000);
+  }
+
+  async _preloadNext() {
+    const idx = this._nextIndex();
+    if (idx < 0 || idx === this.index) return;
+    const s = this.queue[idx];
+    if (!s) return;
+    const url = API.streamUrl(s.file);
+    if (this._preloading === url) return;
+    this._preloading = url;
+    try {
+      // 预取前 1MB 填充浏览器 HTTP 缓存，切歌时可秒开
+      const res = await fetch(url, { headers: { Range: 'bytes=0-1048575' } });
+      if (res && res.ok) {
+        const reader = res.body.getReader();
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+      }
+    } catch (e) {}
+    this._preloading = null;
   }
 
   playPause() {

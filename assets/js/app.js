@@ -8,9 +8,23 @@ const App = {
     this.player = new Player();
     this._bindPlayer();
     this._bindUI();
+    this._bindMenu();
     this._bindKeyboard();
 
-    // 先快速加载部分歌曲渲染首屏，后台再补全全部；期间顶部显示加载条
+    // 先用本地缓存快速渲染首屏（秒开），后台再拉取最新并静默刷新
+    const cached = this._readLocalSongs();
+    if (cached && cached.length) {
+      this.allSongs = cached;
+      this._loadingFull = true;
+      this._showLoading(true);
+      this.go('home');
+      this._bindNav();
+      this._bindSearch();
+      this._refreshFromServer();
+      return;
+    }
+
+    // 首次访问：先快速加载部分歌曲渲染首屏，后台再补全全部；期间顶部显示加载条
     this._loadingFull = true;
     this._showLoading(true);
     const quick = await API.songs('all', 12).catch(() => null);
@@ -32,21 +46,34 @@ const App = {
     this._bindNav();
     this._bindSearch();
 
-    // 后台加载全部歌曲，完成后刷新当前视图
-    API.songs('all').then(full => {
-      if (full && full.data && full.data.songs.length > this.allSongs.length) {
-        this.allSongs = full.data.songs;
-      }
-      this._loadingFull = false;
-      this._showLoading(false);
-      const v = this.currentView;
-      if (v && Views[v]) Views[v].call(Views);
-    }).catch(() => {
-      this._loadingFull = false;
-      this._showLoading(false);
-      const v = this.currentView;
-      if (v && Views[v]) Views[v].call(Views);
-    });
+    this._refreshFromServer();
+  },
+
+  // ---- 歌单本地缓存（localStorage，下次秒开） ----
+  LOCAL_KEY: 'mw.songs.v1',
+  _readLocalSongs() {
+    try {
+      const raw = localStorage.getItem(this.LOCAL_KEY);
+      if (!raw) return null;
+      const j = JSON.parse(raw);
+      return Array.isArray(j) ? j : null;
+    } catch (e) { return null; }
+  },
+  _saveLocalSongs() {
+    try { localStorage.setItem(this.LOCAL_KEY, JSON.stringify(this.allSongs)); } catch (e) { /* 容量满则忽略 */ }
+  },
+
+  // 后台拉取全量歌单，刷新缓存并重渲染当前视图
+  async _refreshFromServer() {
+    const full = await API.songs('all').catch(() => null);
+    if (full && full.data && full.data.songs) {
+      this.allSongs = full.data.songs;
+      this._saveLocalSongs();
+    }
+    this._loadingFull = false;
+    this._showLoading(false);
+    const v = this.currentView;
+    if (v && Views[v]) Views[v].call(Views);
   },
 
   // ---- 顶部加载条 ----
@@ -75,6 +102,41 @@ const App = {
     r.unshift(id);
     if (r.length > 100) r = r.slice(0, 100);
     localStorage.setItem('mw.recent', JSON.stringify(r));
+  },
+
+  // ---- 我喜欢（本地歌单，存 localStorage，不存服务器）----
+  getLikes() {
+    try { return JSON.parse(localStorage.getItem('mw.likes')) || []; } catch (e) { return []; }
+  },
+  isLiked(file) { return this.getLikes().includes(file); },
+  toggleLike(song) {
+    let list = this.getLikes();
+    const has = list.includes(song.file);
+    list = has ? list.filter(f => f !== song.file) : list.concat(song.file);
+    localStorage.setItem('mw.likes', JSON.stringify(list));
+    this._syncLikes();
+    return !has;
+  },
+  // 同步所有心形按钮状态（曲目行 / 迷你播放条 / 播放页）
+  _syncLikes() {
+    const liked = new Set(this.getLikes());
+    document.querySelectorAll('.like-btn[data-file]').forEach(btn => {
+      const on = liked.has(btn.dataset.file);
+      btn.classList.toggle('liked', on);
+      btn.querySelector('use')?.setAttribute('href', on ? '#i-heart-fill' : '#i-heart');
+      btn.title = on ? '取消喜欢' : '喜欢';
+    });
+    const cur = this.player && this.player.current;
+    const curOn = cur && liked.has(cur.file);
+    this._setBtnLike('btnLike', curOn);
+    this._setBtnLike('npLike', curOn);
+  },
+  _setBtnLike(id, on) {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.classList.toggle('liked', on);
+    b.querySelector('use')?.setAttribute('href', on ? '#i-heart-fill' : '#i-heart');
+    b.title = on ? '取消喜欢' : '喜欢';
   },
 
   // ---- 路由 ----
@@ -120,18 +182,20 @@ const App = {
       document.getElementById('mpTitle').textContent = s.title;
       document.getElementById('mpArtist').textContent = s.artist;
       const mpC = document.getElementById('mpCover');
-      mpC.innerHTML = s.hasCover ? `<img src="${API.coverUrl(s.base)}">` : '♪';
+      mpC.innerHTML = s.hasCover ? `<img src="${API.coverUrl(s.base)}">` : ICON('music', 'big');
       document.getElementById('npTitle').textContent = s.title;
       document.getElementById('npArtist').textContent = s.artist;
       const npArt = document.getElementById('npArt');
-      npArt.innerHTML = s.hasCover ? `<img src="${API.coverUrl(s.base)}">` : '♪';
+      npArt.innerHTML = s.hasCover ? `<img src="${API.coverUrl(s.base)}">` : ICON('music', 'big');
       // 背景渐变
       App._updateBg(s);
       // 播放中高亮
       document.querySelectorAll('.track').forEach(el => el.classList.toggle('playing', el.dataset.file === s.file));
       // 标记播放按钮
-      btnPlay.textContent = '⏸';
-      npPlay.textContent = '⏸';
+      btnPlay.innerHTML = ICON('pause');
+      npPlay.innerHTML = ICON('pause');
+      // 同步当前歌曲喜欢状态
+      App._syncLikes();
     };
 
     // 歌词加载完成后渲染（避免异步加载前渲染空数组）
@@ -169,8 +233,8 @@ const App = {
     };
 
     p.onPlayState = (playing) => {
-      btnPlay.textContent = playing ? '⏸' : '▶';
-      npPlay.textContent = playing ? '⏸' : '▶';
+      btnPlay.innerHTML = ICON(playing ? 'pause' : 'play', playing ? '' : 'play');
+      npPlay.innerHTML = ICON(playing ? 'pause' : 'play', playing ? '' : 'play');
     };
 
     btnPlay.onclick = () => p.playPause();
@@ -192,8 +256,8 @@ const App = {
       npShuffle.classList.toggle('active', shuff);
       repeatBtn.classList.toggle('active', single);
       npRepeat.classList.toggle('active', single);
-      repeatBtn.textContent = single ? '🔂' : '🔁';
-      npRepeat.textContent = single ? '🔂' : '🔁';
+      repeatBtn.innerHTML = ICON(single ? 'repeat-one' : 'repeat');
+      npRepeat.innerHTML = ICON(single ? 'repeat-one' : 'repeat');
     };
     shuffleBtn.onclick = npShuffle.onclick = () => { p.toggleMode(); updMode(); };
     repeatBtn.onclick = npRepeat.onclick = () => { p.toggleMode(); updMode(); };
@@ -221,18 +285,22 @@ const App = {
     // 音量
     const vbar = document.getElementById('volumeBar');
     const vfill = document.getElementById('volumeFill');
+    const setVolIcon = (btn) => {
+      const v = p.volume;
+      btn.innerHTML = ICON(v === 0 ? 'volume-mute' : (v < 0.5 ? 'volume-low' : 'volume'));
+    };
     const setVol = (e) => {
       const rect = vbar.getBoundingClientRect();
       p.setVolume(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
       vfill.style.width = (p.volume * 100) + '%';
-      document.getElementById('btnVolume').textContent = p.volume === 0 ? '🔇' : (p.volume < 0.5 ? '🔉' : '🔊');
+      setVolIcon(document.getElementById('btnVolume'));
     };
     let volDrag = false;
     vbar.addEventListener('mousedown', (e) => { volDrag = true; setVol(e); });
     window.addEventListener('mousemove', (e) => { if (volDrag) setVol(e); });
     window.addEventListener('mouseup', () => { volDrag = false; });
     vfill.style.width = (p.volume * 100) + '%';
-    document.getElementById('btnVolume').textContent = p.volume === 0 ? '🔇' : (p.volume < 0.5 ? '🔉' : '🔊');
+    setVolIcon(document.getElementById('btnVolume'));
   },
 
   _updateLyric(cur) {
@@ -261,9 +329,9 @@ const App = {
     const lyr = this.player.lyrics;
     this._lastLyricIdx = -1;
     if (!lyr.length) {
-      lyricArea.classList.remove('visible');
-      lyricToggle.classList.remove('active');
-      inner.innerHTML = '';
+      lyricArea.classList.add('visible');
+      lyricToggle.classList.add('active');
+      inner.innerHTML = '<div class="lrc-empty">纯音乐，请欣赏</div>';
       return;
     }
     lyricArea.classList.add('visible');
@@ -317,8 +385,7 @@ const App = {
     document.getElementById('npDownload').onclick = () => {
       const s = this.player.current;
       if (s) this.downloadSong(s.file);
-    };
-    document.getElementById('npShare').onclick = () => {
+    };    document.getElementById('npShare').onclick = () => {
       const s = this.player.current;
       if (!s) return;
       const url = API.streamUrl(s.file);
@@ -333,8 +400,8 @@ const App = {
         try { document.execCommand('copy'); } catch (e) {}
         document.body.removeChild(tmp);
         const btn = document.getElementById('npShare');
-        btn.textContent = '✓';
-        setTimeout(() => { btn.textContent = '↗'; }, 1200);
+        btn.innerHTML = ICON('check');
+        setTimeout(() => { btn.innerHTML = ICON('share'); }, 1200);
       }
     };
     const npVolBar = document.getElementById('npVolumeBar');
@@ -344,12 +411,23 @@ const App = {
       const rect = npVolBar.getBoundingClientRect();
       this.player.setVolume(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
       npVolFill.style.width = (this.player.volume * 100) + '%';
-      npVolIcon.textContent = this.player.volume === 0 ? '🔇' : (this.player.volume < 0.5 ? '🔉' : '🔊');
+      const v = this.player.volume;
+      npVolIcon.innerHTML = ICON(v === 0 ? 'volume-mute' : (v < 0.5 ? 'volume-low' : 'volume'));
     };
     npVolBar.addEventListener('mousedown', (e) => { e.stopPropagation(); setNpVol(e); App._npVolDrag = true; });
     window.addEventListener('mousemove', (e) => { if (App._npVolDrag) setNpVol(e); });
     window.addEventListener('mouseup', () => { App._npVolDrag = false; });
     npVolFill.style.width = (this.player.volume * 100) + '%';
+
+    // 喜欢（当前歌曲）
+    const likeSong = () => {
+      const s = this.player.current;
+      if (!s) return;
+      App.toggleLike(s);
+    };
+    document.getElementById('btnLike').onclick = likeSong;
+    document.getElementById('npLike').onclick = likeSong;
+    this._syncLikes();
 
     // 前进后退
     document.getElementById('btnBack').onclick = () => {
@@ -357,6 +435,27 @@ const App = {
       if (h.length > 1) { h.pop(); this.go(h[h.length - 1]); }
     };
     document.getElementById('btnFwd').onclick = () => this.go('home');
+  },
+
+  // 移动端侧边栏：汉堡按钮开合
+  _bindMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const mask = document.getElementById('sidebarMask');
+    const btnMenu = document.getElementById('btnMenu');
+    const setOpen = (open) => {
+      sidebar.classList.toggle('open', open);
+      mask.classList.toggle('show', open);
+      btnMenu.querySelector('use').setAttribute('href', open ? '#i-close' : '#i-menu');
+      btnMenu.title = open ? '关闭菜单' : '菜单';
+    };
+    btnMenu.onclick = () => setOpen(!sidebar.classList.contains('open'));
+    mask.onclick = () => setOpen(false);
+    // 点击导航项后自动收起
+    document.querySelectorAll('.nav-item').forEach(el => {
+      el.addEventListener('click', () => setOpen(false), true);
+    });
+    // 窗口变宽时复位
+    window.addEventListener('resize', () => { if (innerWidth > 900) setOpen(false); });
   },
 
   _bindNav() {

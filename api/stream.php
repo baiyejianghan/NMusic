@@ -1,5 +1,5 @@
 <?php
-// 音频流接口：支持 HTTP Range 断点续传（拖动进度条必需）
+// 音频流接口：PHP 校验后交给 nginx X-Accel 内部重定向发送（零拷贝、原生 Range 支持）
 require_once __DIR__ . '/common.php';
 
 $base = $_GET['file'] ?? '';
@@ -17,6 +17,8 @@ if (!is_file($path)) {
 }
 
 $size = filesize($path);
+$mtime = filemtime($path);
+$etag = '"' . md5($size . '-' . $mtime) . '"';
 $mime = [
     'mp3' => 'audio/mpeg', 'flac' => 'audio/flac', 'wav' => 'audio/wav',
     'm4a' => 'audio/mp4', 'ogg' => 'audio/ogg', 'aac' => 'audio/aac',
@@ -24,56 +26,23 @@ $mime = [
 ];
 $ct = $mime[$ext] ?? 'application/octet-stream';
 
-// ---- Range 处理 ----
-$start = 0;
-$end = $size - 1;
-$isRange = false;
-
-if (isset($_SERVER['HTTP_RANGE'])) {
-    if (preg_match('/bytes=(\d*)-(\d*)/', $_SERVER['HTTP_RANGE'], $m)) {
-        $isRange = true;
-        if ($m[1] !== '') {
-            $start = (int)$m[1];
-            if ($m[2] !== '') $end = min((int)$m[2], $size - 1);
-        } else {
-            // 后缀范围 bytes=-500（取最后 500 字节）
-            $suffix = (int)$m[2];
-            $start = max(0, $size - $suffix);
-        }
-    }
-}
-
-if ($start > $end || $start >= $size) {
-    http_response_code(416);
-    header('Content-Range: bytes */' . $size);
-    exit;
-}
-
-if ($isRange) {
-    http_response_code(206);
-    header('Content-Range: bytes ' . $start . '-' . $end . '/' . $size);
-    header('Accept-Ranges: bytes');
-} else {
-    header('Accept-Ranges: bytes');
-}
-
-$length = $end - $start + 1;
 header('Content-Type: ' . $ct);
-header('Content-Length: ' . $length);
-header('Cache-Control: no-cache');
+header('Accept-Ranges: bytes');
+header('Cache-Control: public, max-age=86400, stale-while-revalidate=604800');
 
-$fp = fopen($path, 'rb');
-if ($fp === false) {
-    http_response_code(500);
-    exit('open failed');
+// 304 缓存校验（文件名编码需 URI 规范）
+header('ETag: ' . $etag);
+header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
+if (isset($_SERVER['HTTP_IF_NONE_MATCH'])) {
+    $inm = trim($_SERVER['HTTP_IF_NONE_MATCH']);
+    if (strncmp($inm, 'W/', 2) === 0) $inm = trim(substr($inm, 2));
+    if ($inm === $etag) { http_response_code(304); exit; }
 }
-if ($start > 0) fseek($fp, $start);
-$sent = 0;
-while ($sent < $length && !feof($fp)) {
-    $chunk = fread($fp, min(81920, $length - $sent));
-    if ($chunk === false) break;
-    echo $chunk;
-    $sent += strlen($chunk);
-    flush();
+if (isset($_SERVER['HTTP_IF_MODIFIED_SINCE'])) {
+    $ims = strtotime($_SERVER['HTTP_IF_MODIFIED_SINCE']);
+    if ($ims !== false && $ims >= $mtime) { http_response_code(304); exit; }
 }
-fclose($fp);
+
+// 交给 nginx 内部发送文件（nginx 原生处理 Range/206）
+// 注意：base 已通过 safeFileName（无 ..、无斜杠），但文件名含空格/中文，需 URL 编码为 URI
+header('X-Accel-Redirect: ' . '/protected-music/' . rawurlencode($base));

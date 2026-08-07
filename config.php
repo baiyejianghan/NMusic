@@ -3,7 +3,7 @@
 // 请根据实际部署修改数据库信息
 
 // ===== 数据库配置（MySQL）=====
-define('DB_HOST', '127.0.0.1');            // MySQL 地址
+define('DB_HOST', '127.0.0.1');            // 宝塔 MySQL 默认本机
 define('DB_PORT', 3306);
 define('DB_USER', 'your_db_user');         // 数据库用户名
 define('DB_PASS', 'your_db_password');     // 数据库密码
