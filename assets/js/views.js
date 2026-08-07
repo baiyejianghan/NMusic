@@ -136,16 +136,34 @@ const Views = {
     const recentIds = App.getRecent().filter(id => id < songs.length);
     const recentCards = recentIds.slice(0, 10).map(id => this.card(songs[id])).join('');
     const heroCard = `<div class="home-hero">${hero}${banner}</div>` + (recentCards ? `<div class="section"><div class="section-head"><div class="section-title">最近播放</div><div class="section-more" data-view="recent">显示全部</div></div><div class="hscroll">${recentCards}</div></div>` : '');
-    const allCards = songs.map(s => this.card(s)).join('');
-    const trackRows = songs.map((s, i) => this.trackRow({ ...s, idx: i + 1 })).join('');
+
+    // 热门歌曲（保留）：前 12 首
+    const hotSection = songs.length ? `
+      <div class="section"><div class="section-head"><div class="section-title">热门歌曲</div><div class="section-more" data-view="songs">显示全部</div></div>
+      <div class="hscroll">${songs.slice(0, 12).map(s => this.card(s)).join('')}</div></div>` : '';
+
+    // 喜欢的歌曲（无则隐藏该栏）
+    const likedSongs = App.getLikes().map(f => App.getSongByFile(f)).filter(Boolean).slice(0, 12);
+    const likedSection = likedSongs.length ? `
+      <div class="section"><div class="section-head"><div class="section-title">喜欢的歌曲</div><div class="section-more" data-view="likes">显示全部</div></div>
+      <div class="hscroll">${likedSongs.map(s => this.card(s)).join('')}</div></div>` : '';
+
+    // 猜你喜欢：随机抽取 12 首
+    const guessList = songs.slice().sort(() => Math.random() - 0.5).slice(0, 12);
+    const guessSection = songs.length ? `
+      <div class="section"><div class="section-head"><div class="section-title">猜你喜欢</div></div>
+      <div class="hscroll">${guessList.map(s => this.card(s)).join('')}</div></div>` : '';
+
+    // 最新新歌：文库末尾最近添加的一些
+    const newSection = songs.length ? `
+      <div class="section"><div class="section-head"><div class="section-title">最新新歌</div><div class="section-more" data-view="songs">显示全部</div></div>
+      <div class="hscroll">${songs.slice(-12).reverse().map(s => this.card(s)).join('')}</div></div>` : '';
 
     this.content.innerHTML = heroCard + `
-      <div class="section"><div class="section-head"><div class="section-title">热门歌曲</div><div class="section-more" data-view="songs">显示全部</div></div>
-      <div class="hscroll">${songs.slice(0, 12).map(s => this.card(s)).join('')}</div></div>
-      <div class="section"><div class="section-title" style="margin-bottom:14px">全部歌曲</div><div class="tracklist">
-      <div class="tracklist-head"><div></div><div>标题</div><div>时长</div></div>${trackRows}</div></div>
-      ${this.loadingMore()}`;
-    void allCards;
+      ${hotSection}
+      ${likedSection}
+      ${guessSection}
+      ${newSection}`;
     this._afterRender();
     this._initBanner();
     document.querySelectorAll('.section-more[data-view]').forEach(el => el.addEventListener('click', () => App.go(el.dataset.view)));

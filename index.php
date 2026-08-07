@@ -8,7 +8,7 @@ require_once __DIR__ . '/config.php';
 <title>NMusic</title>
 <meta name="theme-color" content="#0a0a0c">
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/css/style.css?v=65">
+<link rel="stylesheet" href="assets/css/style.css?v=66">
 </head>
 <body>
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
@@ -181,9 +181,9 @@ require_once __DIR__ . '/config.php';
     </div>
   </div>
 </div>
-<script src="assets/js/api.js?v=65"></script>
-<script src="assets/js/player.js?v=65"></script>
-<script src="assets/js/views.js?v=65"></script>
-<script src="assets/js/app.js?v=65"></script>
+<script src="assets/js/api.js?v=66"></script>
+<script src="assets/js/player.js?v=66"></script>
+<script src="assets/js/views.js?v=66"></script>
+<script src="assets/js/app.js?v=66"></script>
 </body>
 </html>
