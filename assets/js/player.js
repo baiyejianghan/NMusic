@@ -167,13 +167,18 @@ class Player {
     if (this._lyricTimer) { clearInterval(this._lyricTimer); this._lyricTimer = null; }
     try {
       const r = await API.lyrics(base);
-      if (r && r.ok && Array.isArray(r.data.lyrics)) {
+      if (r && r.ok && Array.isArray(r.data.lyrics) && r.data.lyrics.length) {
         this.lyrics = r.data.lyrics;
         const off = r.data.meta && r.data.meta.offset ? r.data.meta.offset / 1000 : 0;
         this.lyricOffset = off;
         this.lyrics.forEach(l => l.t = l.t + off);
+      } else {
+        // 无歌词 / 检测不到歌词：加载默认歌词「纯音乐，请欣赏」并在整首播放中保持高亮
+        this.lyrics = [{ t: 0, text: '纯音乐，请欣赏' }];
       }
-    } catch (e) {}
+    } catch (e) {
+      this.lyrics = [{ t: 0, text: '纯音乐，请欣赏' }];
+    }
     if (this.onLyrics) this.onLyrics();
     this._emitTime();
   }

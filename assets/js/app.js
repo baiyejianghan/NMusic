@@ -326,14 +326,9 @@ const App = {
     const inner = document.getElementById('npLyricInner');
     const lyricArea = document.getElementById('npLyricArea');
     const lyricToggle = document.getElementById('npLyricToggle');
-    const lyr = this.player.lyrics;
+    let lyr = this.player.lyrics;
+    if (!lyr || !lyr.length) lyr = [{ t: 0, text: '纯音乐，请欣赏' }];
     this._lastLyricIdx = -1;
-    if (!lyr.length) {
-      lyricArea.classList.add('visible');
-      lyricToggle.classList.add('active');
-      inner.innerHTML = '<div class="lrc-empty">纯音乐，请欣赏</div>';
-      return;
-    }
     lyricArea.classList.add('visible');
     lyricToggle.classList.add('active');
     inner.innerHTML = lyr.map(l => {
